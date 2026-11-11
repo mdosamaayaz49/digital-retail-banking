@@ -26,6 +26,8 @@ test("mobile overview fits viewport", async ({ page }) => {
   ).toBeTruthy();
   await page.getByRole("button", { name: "Toggle navigation" }).click();
   await expect(
-    page.getByRole("link", { name: "My accounts", exact: true }),
+    page
+      .getByRole("navigation", { name: "Main navigation" })
+      .getByRole("link", { name: "My accounts", exact: true }),
   ).toBeVisible();
 });

@@ -34,7 +34,7 @@ management:
   endpoints:
     web:
       exposure:
-        include: health,info
+        include: health,info,prometheus
   endpoint:
     health:
       probes:
@@ -45,6 +45,7 @@ springdoc:
 banking:
   cors-origin: ${CORS_ORIGIN:http://localhost:5173}
   outbox-enabled: ${OUTBOX_ENABLED:true}
+  orders-enabled: ${ORDERS_ENABLED:true}
 logging:
   structured:
     format:

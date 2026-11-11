@@ -1,3 +1,4 @@
+import { bankDate } from "./lib/banking";
 // @vitest-environment jsdom
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import "@testing-library/jest-dom/vitest";
@@ -18,4 +19,9 @@ describe("banking preview", () => {
     expect(await screen.findByText("18,530.50")).toBeInTheDocument();
     expect(screen.getByText(/Fictional people/)).toBeInTheDocument();
   });
+});
+
+it("uses the Malaysian banking date across UTC midnight boundaries", () => {
+  expect(bankDate(new Date("2026-11-10T16:00:00Z"))).toBe("2026-11-11");
+  expect(bankDate(new Date("2026-11-10T15:59:59Z"))).toBe("2026-11-10");
 });

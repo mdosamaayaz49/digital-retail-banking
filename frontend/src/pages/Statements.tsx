@@ -1,7 +1,7 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Download, FileText } from "lucide-react";
 import { useState } from "react";
-import { api, date, downloadStatement } from "../lib/banking";
+import { api, bankDate, date, downloadStatement } from "../lib/banking";
 
 import { Empty, ErrorBox, Title } from "../components/banking";
 import { useAccounts, useBank } from "../lib/context";
@@ -10,9 +10,12 @@ export function Statements() {
   const { data: accounts = [] } = useAccounts();
   const query = useQueryClient();
   const [account, setAccount] = useState(""),
-    [month, setMonth] = useState(new Date().toISOString().slice(0, 7)),
+    [month, setMonth] = useState(bankDate().slice(0, 7)),
     [error, setError] = useState<unknown>(null),
     [busy, setBusy] = useState(false);
+  const [range, setRange] = useState(false),
+    [from, setFrom] = useState(""),
+    [to, setTo] = useState("");
   type Statement = {
     id: string;
     date_from: string;
@@ -46,8 +49,8 @@ export function Statements() {
         method: "POST",
         body: JSON.stringify({
           accountId: account,
-          from: month + "-01",
-          to: end > today ? today : end,
+          from: range ? from : month + "-01",
+          to: range ? to : end > today ? today : end,
         }),
       });
       await query.invalidateQueries({ queryKey: ["statements"] });
@@ -87,15 +90,55 @@ export function Statements() {
               </select>
             </label>
             <label>
-              Statement month
-              <input
-                required
-                type="month"
-                value={month}
-                max={new Date().toISOString().slice(0, 7)}
-                onChange={(e) => setMonth(e.target.value)}
-              />
+              Statement period
+              <select
+                value={range ? "range" : "month"}
+                onChange={(e) => setRange(e.target.value === "range")}
+              >
+                <option value="month">Monthly statement</option>
+                <option value="range">Custom date range</option>
+              </select>
             </label>
+            {range ? (
+              <>
+                <label>
+                  From date
+                  <input
+                    required
+                    type="date"
+                    value={from}
+                    max={bankDate()}
+                    onChange={(e) => setFrom(e.target.value)}
+                  />
+                </label>
+                <label>
+                  To date
+                  <input
+                    required
+                    type="date"
+                    min={from}
+                    max={bankDate()}
+                    value={to}
+                    onChange={(e) => setTo(e.target.value)}
+                  />
+                </label>
+                <small className="field-hint">
+                  Choose a past period of at most one year, in Malaysian
+                  calendar dates.
+                </small>
+              </>
+            ) : (
+              <label>
+                Statement month
+                <input
+                  required
+                  type="month"
+                  value={month}
+                  max={bankDate().slice(0, 7)}
+                  onChange={(e) => setMonth(e.target.value)}
+                />
+              </label>
+            )}
             <ErrorBox error={error} />
             <button className="btn primary full" disabled={busy}>
               <Download size={17} />

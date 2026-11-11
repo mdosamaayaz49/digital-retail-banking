@@ -26,7 +26,18 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.*;
 
-@SpringBootTest(properties = {"banking.outbox-enabled=false", "logging.structured.format.console="})
+@SpringBootTest(
+    properties = {
+      "banking.outbox-enabled=false",
+      "banking.orders-enabled=false",
+      "logging.structured.format.console="
+    })
+@org.springframework.context.annotation.Import({
+  com.nusantara.banking.web.CustomerController.class,
+  com.nusantara.banking.web.AccountController.class,
+  com.nusantara.banking.web.AccountLifecycleController.class,
+  com.nusantara.banking.web.StatementController.class
+})
 @AutoConfigureMockMvc
 @Testcontainers
 class BankingIntegrationTest {
@@ -50,6 +61,9 @@ class BankingIntegrationTest {
       B = UUID.fromString("10000000-0000-0000-0000-000000000002"),
       R = UUID.fromString("10000000-0000-0000-0000-000000000003");
 
+  @Autowired PaymentOrderService orders;
+  @Autowired AccountOperations operations;
+
   @BeforeEach
   void reset() {
     db.execute(
@@ -63,7 +77,8 @@ class BankingIntegrationTest {
     setup.execute(
         status -> {
           new ResourceDatabasePopulator(
-                  new ClassPathResource("db/migration/V2__fictional_demo.sql"))
+                  new ClassPathResource("db/migration/V2__fictional_demo.sql"),
+                  new ClassPathResource("demo-aliases.sql"))
               .execute(Objects.requireNonNull(db.getDataSource()));
           return null;
         });
@@ -448,5 +463,421 @@ class BankingIntegrationTest {
             get("/api/v1/transactions?size=101")
                 .with(jwt().jwt(j -> j.subject("11111111-1111-1111-1111-111111111111"))))
         .andExpect(status().isBadRequest());
+  }
+
+  com.nusantara.banking.dto.OrderRequest order(String channel, String alias) {
+    return new com.nusantara.banking.dto.OrderRequest(
+        A,
+        R,
+        new BigDecimal("500.00"),
+        "Scheduled lunch",
+        channel,
+        alias,
+        java.time.Instant.now().minusSeconds(2));
+  }
+
+  @Test
+  void openAndCloseZeroBalanceAccount() {
+    var a = operations.open(C, "SAVINGS", "Rainy day");
+    var id = (UUID) a.get("id");
+    assertEquals(BigDecimal.ZERO.setScale(2), balance(id));
+    operations.close(C, id);
+    assertEquals(
+        "CLOSED",
+        db.queryForObject("select status from bank_accounts where id=?", String.class, id));
+    checkReconciled();
+  }
+
+  @Test
+  void fundedAccountCannotClose() {
+    assertEquals(
+        "ACCOUNT_NOT_EMPTY",
+        assertThrows(BankingException.class, () -> operations.close(C, A)).code);
+  }
+
+  @Test
+  void holdProtectsAvailableFundsAndReleaseIsIdempotent() {
+    var h = operations.hold(A, UUID.randomUUID(), new BigDecimal("10000.00"), "Review", "admin");
+    assertEquals(
+        "INSUFFICIENT_FUNDS",
+        assertThrows(
+                BankingException.class,
+                () -> transfers.transfer(C, UUID.randomUUID(), request("3000.00")))
+            .code);
+    operations.release((UUID) h.get("id"), "admin");
+    operations.release((UUID) h.get("id"), "admin");
+    transfers.transfer(C, UUID.randomUUID(), request("3000.00"));
+    checkReconciled();
+  }
+
+  @Test
+  void pendingOrderReservesAndCancellationReleases() {
+    var key = UUID.randomUUID();
+    var req = order("SCHEDULED", null);
+    var first = orders.create(C, key, req);
+    assertEquals(first.get("id"), orders.create(C, key, req).get("id"));
+    assertEquals(
+        new BigDecimal("500.00"),
+        db.queryForObject("select held from bank_accounts where id=?", BigDecimal.class, A));
+    orders.cancel(C, (UUID) first.get("id"));
+    orders.cancel(C, (UUID) first.get("id"));
+    assertEquals(
+        BigDecimal.ZERO.setScale(2),
+        db.queryForObject("select held from bank_accounts where id=?", BigDecimal.class, A));
+    assertEquals(new BigDecimal("12850.00"), balance(A));
+    checkReconciled();
+  }
+
+  @Test
+  void scheduledSettlementPostsOnce() {
+    var o = orders.create(C, UUID.randomUUID(), order("SCHEDULED", null));
+    var id = (UUID) o.get("id");
+    orders.process(C, id);
+    orders.process(C, id);
+    assertEquals("SETTLED", orders.get(C, id).get("status"));
+    assertEquals(new BigDecimal("12350.00"), balance(A));
+    assertEquals(
+        "ALREADY_PROCESSED", assertThrows(BankingException.class, () -> orders.cancel(C, id)).code);
+    checkReconciled();
+  }
+
+  @Test
+  void mockNetworkAcceptsWithReconciledReference() {
+    var o = orders.create(C, UUID.randomUUID(), order("DUITNOW_MOCK", "daniel@example.test"));
+    var id = (UUID) o.get("id");
+    orders.process(C, id);
+    assertEquals("SETTLED", orders.get(C, id).get("status"));
+    assertEquals(
+        "ACCEPTED",
+        db.queryForObject(
+            "select outcome from network_messages where order_id=?", String.class, id));
+    assertNotNull(orders.get(C, id).get("network_reference"));
+    checkReconciled();
+  }
+
+  @Test
+  void mockNetworkRejectionHasNoPostingAndReleasesFunds() {
+    var o = orders.create(C, UUID.randomUUID(), order("DUITNOW_MOCK", "reject@example.test"));
+    var id = (UUID) o.get("id");
+    orders.process(C, id);
+    assertEquals("REJECTED", orders.get(C, id).get("status"));
+    assertEquals(new BigDecimal("12850.00"), balance(A));
+    assertEquals(
+        BigDecimal.ZERO.setScale(2),
+        db.queryForObject("select held from bank_accounts where id=?", BigDecimal.class, A));
+    assertEquals(
+        1,
+        db.queryForObject(
+            "select count(*) from outbox_events where event_type='TRANSFER_FAILED'",
+            Integer.class));
+    checkReconciled();
+  }
+
+  @Test
+  void futurePaymentCannotSettleEarly() {
+    var req =
+        new com.nusantara.banking.dto.OrderRequest(
+            A,
+            R,
+            new BigDecimal("500.00"),
+            "Tomorrow",
+            "SCHEDULED",
+            null,
+            java.time.Instant.now().plusSeconds(3600));
+    var o = orders.create(C, UUID.randomUUID(), req);
+    orders.process(C, (UUID) o.get("id"));
+    assertEquals("PENDING", orders.get(C, (UUID) o.get("id")).get("status"));
+    assertEquals(new BigDecimal("12850.00"), balance(A));
+  }
+
+  @Test
+  void frozenBeforeSettlementRejectsAndReleases() {
+    var o = orders.create(C, UUID.randomUUID(), order("SCHEDULED", null));
+    db.update("update bank_accounts set status='FROZEN' where id=?", A);
+    orders.process(C, (UUID) o.get("id"));
+    assertEquals("REJECTED", orders.get(C, (UUID) o.get("id")).get("status"));
+    assertEquals(new BigDecimal("12850.00"), balance(A));
+  }
+
+  @Test
+  void foreignOrderAndOrderHoldCannotBeMutated() {
+    var o = orders.create(C, UUID.randomUUID(), order("SCHEDULED", null));
+    assertEquals(
+        404,
+        assertThrows(BankingException.class, () -> orders.cancel(D, (UUID) o.get("id"))).status);
+    assertEquals(
+        "ORDER_HOLD",
+        assertThrows(
+                BankingException.class, () -> operations.release((UUID) o.get("hold_id"), "admin"))
+            .code);
+  }
+
+  @Test
+  void concurrentCancellationAndSettlementStayConsistent() throws Exception {
+    var o = orders.create(C, UUID.randomUUID(), order("SCHEDULED", null));
+    var id = (UUID) o.get("id");
+    try (var pool = java.util.concurrent.Executors.newFixedThreadPool(2)) {
+      var a =
+          pool.submit(
+              () -> {
+                orders.process(C, id);
+              });
+      var b =
+          pool.submit(
+              () -> {
+                try {
+                  orders.cancel(C, id);
+                } catch (BankingException e) {
+                  assertEquals("ALREADY_PROCESSED", e.code);
+                }
+              });
+      a.get(15, TimeUnit.SECONDS);
+      b.get(15, TimeUnit.SECONDS);
+    }
+    assertTrue(List.of("CANCELLED", "SETTLED").contains(orders.get(C, id).get("status")));
+    assertEquals(
+        BigDecimal.ZERO.setScale(2),
+        db.queryForObject("select held from bank_accounts where id=?", BigDecimal.class, A));
+    checkReconciled();
+  }
+
+  @Test
+  void failedHttpTransferProducesOneCommittedNotification() throws Exception {
+    var key = UUID.randomUUID();
+    String content =
+        "{\"sourceId\":\""
+            + B
+            + "\",\"destinationId\":\""
+            + A
+            + "\",\"amount\":\"9000.00\",\"description\":\"Not enough funds\"}";
+    for (int i = 0; i < 2; i++)
+      mvc.perform(
+              post("/api/v1/transfers")
+                  .with(jwt().jwt(j -> j.subject("11111111-1111-1111-1111-111111111111")))
+                  .header("Idempotency-Key", key)
+                  .contentType("application/json")
+                  .content(content))
+          .andExpect(status().isUnprocessableEntity());
+    assertEquals(
+        1,
+        db.queryForObject(
+            "select count(*) from outbox_events where event_type='TRANSFER_FAILED'",
+            Integer.class));
+    checkReconciled();
+  }
+
+  @Test
+  void readOnlySupportCanReconcileButCannotMutate() throws Exception {
+    mvc.perform(
+            get("/api/v1/admin/reconciliation")
+                .with(jwt().authorities(new SimpleGrantedAuthority("ROLE_SUPPORT"))))
+        .andExpect(status().isOk())
+        .andExpect(
+            org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath("$.balanced")
+                .value(true));
+    mvc.perform(
+            post("/api/v1/admin/transfers/" + UUID.randomUUID() + "/reverse")
+                .with(jwt().authorities(new SimpleGrantedAuthority("ROLE_SUPPORT"))))
+        .andExpect(status().isForbidden());
+  }
+
+  @Test
+  void ledgerAnalyticsExcludeOwnAccountMovements() throws Exception {
+    transfers.transfer(
+        C, UUID.randomUUID(), new TransferRequest(A, B, new BigDecimal("75.00"), "Own account"));
+    transfers.transfer(C, UUID.randomUUID(), request("12.34"));
+    mvc.perform(
+            get("/api/v1/analytics?months=1")
+                .with(jwt().jwt(j -> j.subject("11111111-1111-1111-1111-111111111111"))))
+        .andExpect(status().isOk())
+        .andExpect(
+            org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath(
+                    "$[0].spending")
+                .value(12.34));
+  }
+
+  @Test
+  void reportsIncludeGrossAndCompensationSeparately() throws Exception {
+    var t = transfers.transfer(C, UUID.randomUUID(), request("50.00"));
+    transfers.reverse((UUID) t.get("id"), "admin");
+    var today = java.time.LocalDate.now(java.time.ZoneId.of("Asia/Kuala_Lumpur"));
+    mvc.perform(
+            get("/api/v1/admin/reports?from=" + today + "&to=" + today)
+                .with(jwt().authorities(new SimpleGrantedAuthority("ROLE_ADMIN"))))
+        .andExpect(status().isOk())
+        .andExpect(
+            org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath(
+                    "$.summary.gross_amount")
+                .value(50))
+        .andExpect(
+            org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath(
+                    "$.summary.compensation_amount")
+                .value(50));
+  }
+
+  @Test
+  void closedAccountCannotBeReopened() throws Exception {
+    var a = operations.open(C, "CURRENT", "Temporary");
+    operations.close(C, (UUID) a.get("id"));
+    mvc.perform(
+            org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch(
+                    "/api/v1/admin/accounts/" + a.get("id") + "/status")
+                .with(jwt().authorities(new SimpleGrantedAuthority("ROLE_ADMIN")))
+                .contentType("application/json")
+                .content("{\"status\":\"ACTIVE\"}"))
+        .andExpect(status().isConflict());
+  }
+
+  @Test
+  void databaseRejectsUnpairedHoldMutation() {
+    assertThrows(
+        Exception.class,
+        () ->
+            db.update(
+                "insert into account_holds(id,customer_id,account_id,amount,reason) values"
+                    + " (?,?,?,1,'unpaired')",
+                UUID.randomUUID(),
+                C,
+                A));
+  }
+
+  @Test
+  void cancelledOrderPayloadChangeConflicts() {
+    var key = UUID.randomUUID();
+    var req = order("SCHEDULED", null);
+    var o = orders.create(C, key, req);
+    orders.cancel(C, (UUID) o.get("id"));
+    var different =
+        new com.nusantara.banking.dto.OrderRequest(
+            A,
+            R,
+            new BigDecimal("600.00"),
+            req.description(),
+            req.channel(),
+            req.alias(),
+            req.scheduledAt());
+    assertEquals(
+        "IDEMPOTENCY_CONFLICT",
+        assertThrows(BankingException.class, () -> orders.create(C, key, different)).code);
+  }
+
+  @Test
+  void concurrentReservationsCannotOverspend() throws Exception {
+    var req =
+        new com.nusantara.banking.dto.OrderRequest(
+            A,
+            R,
+            new BigDecimal("9000.00"),
+            "Reserve",
+            "SCHEDULED",
+            null,
+            java.time.Instant.now().plusSeconds(3600));
+    try (var pool = java.util.concurrent.Executors.newFixedThreadPool(2)) {
+      java.util.concurrent.Callable<Boolean> task =
+          () -> {
+            try {
+              orders.create(C, UUID.randomUUID(), req);
+              return true;
+            } catch (BankingException e) {
+              assertEquals("INSUFFICIENT_FUNDS", e.code);
+              return false;
+            }
+          };
+      var one = pool.submit(task);
+      var two = pool.submit(task);
+      assertNotEquals(one.get(15, TimeUnit.SECONDS), two.get(15, TimeUnit.SECONDS));
+    }
+    assertEquals(
+        new BigDecimal("9000.00"),
+        db.queryForObject("select held from bank_accounts where id=?", BigDecimal.class, A));
+    checkReconciled();
+  }
+
+  @Test
+  void malaysiaDateFiltersIncludeBothMidnightBoundaries() throws Exception {
+    var tx =
+        new org.springframework.transaction.support.TransactionTemplate(
+            new org.springframework.jdbc.datasource.DataSourceTransactionManager(
+                Objects.requireNonNull(db.getDataSource())));
+    for (var instant : List.of("2026-01-16T16:00:00Z", "2026-01-17T15:59:59Z")) {
+      tx.execute(
+          status -> {
+            var id = UUID.randomUUID();
+            var time = java.sql.Timestamp.from(java.time.Instant.parse(instant));
+            db.update(
+                "insert into"
+                    + " transfers(id,customer_id,source_id,destination_id,amount,reference,description,status,idempotency_key,request_hash,created_at)"
+                    + " values (?,?,?,?,1,?,?,'SETTLED',?,'boundary',?)",
+                id,
+                C,
+                A,
+                R,
+                "BND-" + id,
+                "Midnight boundary",
+                UUID.randomUUID(),
+                time);
+            db.update("update bank_accounts set balance=balance-1 where id=?", A);
+            db.update("update bank_accounts set balance=balance+1 where id=?", R);
+            db.update(
+                "insert into ledger_entries(transfer_id,account_id,amount,created_at) values"
+                    + " (?,?,-1,?),(?,?,1,?)",
+                id,
+                A,
+                time,
+                id,
+                R,
+                time);
+            return null;
+          });
+    }
+    mvc.perform(
+            get("/api/v1/transactions?from=2026-01-17&to=2026-01-17&search=Midnight")
+                .with(jwt().jwt(j -> j.subject("11111111-1111-1111-1111-111111111111"))))
+        .andExpect(status().isOk())
+        .andExpect(
+            org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath("$.total")
+                .value(2));
+    mvc.perform(
+            get("/api/v1/admin/reports?from=2026-01-17&to=2026-01-17")
+                .with(jwt().authorities(new SimpleGrantedAuthority("ROLE_ADMIN"))))
+        .andExpect(status().isOk())
+        .andExpect(
+            org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath(
+                    "$.summary.gross_amount")
+                .value(2));
+  }
+
+  @Test
+  void debitedRecipientCanReadCompensatingTransfer() throws Exception {
+    var original = transfers.transfer(C, UUID.randomUUID(), request("50.00"));
+    var reversal = transfers.reverse((UUID) original.get("id"), "admin");
+    mvc.perform(
+            get("/api/v1/transfers/" + reversal.get("id"))
+                .with(jwt().jwt(j -> j.subject("22222222-2222-2222-2222-222222222222"))))
+        .andExpect(status().isOk());
+  }
+
+  @Test
+  void missingReportParametersAreBadRequest() throws Exception {
+    mvc.perform(
+            get("/api/v1/admin/reports")
+                .with(jwt().authorities(new SimpleGrantedAuthority("ROLE_ADMIN"))))
+        .andExpect(status().isBadRequest());
+  }
+
+  @Test
+  void unsupportedMethodReturns405() throws Exception {
+    mvc.perform(get("/api/v1/transfers").with(jwt())).andExpect(status().isMethodNotAllowed());
+  }
+
+  @Test
+  void unsupportedMediaTypeReturns415() throws Exception {
+    mvc.perform(
+            post("/api/v1/transfers")
+                .with(jwt())
+                .header("Idempotency-Key", UUID.randomUUID())
+                .contentType("application/xml")
+                .content("<transfer/>"))
+        .andExpect(status().isUnsupportedMediaType());
   }
 }

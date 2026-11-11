@@ -1,0 +1,7 @@
+apiVersion: 1
+providers:
+  - name: Nusantara
+    folder: Banking simulation
+    type: file
+    options:
+      path: /etc/grafana/provisioning/dashboards/json

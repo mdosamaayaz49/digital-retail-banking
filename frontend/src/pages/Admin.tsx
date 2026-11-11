@@ -16,6 +16,12 @@ import { NavLink, Route, Routes } from "react-router-dom";
 import { Badge, Empty, ErrorBox } from "../components/banking";
 import { api, date, identity, money, type Page } from "../lib/banking";
 import { useBank } from "../lib/context";
+import {
+  Holds,
+  NotificationRecovery,
+  Reconciliation,
+  Reports,
+} from "./Operations";
 type Row = Record<string, string | number>;
 export default function Admin() {
   const { live } = useBank();
@@ -45,8 +51,16 @@ export default function Admin() {
         <NavLink to="/admin/accounts">Accounts</NavLink>
         <NavLink to="/admin/transactions">Transaction monitoring</NavLink>
         <NavLink to="/admin/audit-logs">Audit logs</NavLink>
+        <NavLink to="/admin/holds">Holds</NavLink>
+        <NavLink to="/admin/reconciliation">Reconciliation</NavLink>
+        <NavLink to="/admin/reports">Reports</NavLink>
+        <NavLink to="/admin/notifications">Recovery</NavLink>
       </nav>
       <Routes>
+        <Route path="holds" element={<Holds />} />
+        <Route path="reconciliation" element={<Reconciliation />} />
+        <Route path="reports" element={<Reports />} />
+        <Route path="notifications" element={<NotificationRecovery />} />
         <Route index element={<Summary />} />
         <Route path="customers" element={<Data kind="customers" />} />
         <Route path="accounts" element={<Data kind="accounts" />} />

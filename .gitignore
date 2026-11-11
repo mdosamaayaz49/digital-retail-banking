@@ -8,3 +8,9 @@ test-results/
 !**/.env.example
 
 *.tsbuildinfo
+
+.runtime/
+
+.env.*
+!**/.env.example
+playwright-report/

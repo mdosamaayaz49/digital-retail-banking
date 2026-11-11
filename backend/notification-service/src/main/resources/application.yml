@@ -7,8 +7,18 @@ spring:
     url: ${DATABASE_URL:jdbc:postgresql://localhost:5432/banking}
     username: ${DATABASE_USER:banking}
     password: ${DATABASE_PASSWORD}
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          issuer-uri: ${OIDC_ISSUER:http://localhost:8180/realms/nusantara}
+          jwk-set-uri: ${OIDC_JWKS:http://localhost:8180/realms/nusantara/protocol/openid-connect/certs}
   kafka:
     bootstrap-servers: ${KAFKA_BOOTSTRAP:localhost:9092}
+    producer:
+      acks: all
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.apache.kafka.common.serialization.StringSerializer
     consumer:
       auto-offset-reset: earliest
       enable-auto-commit: false
@@ -24,8 +34,11 @@ management:
   endpoints:
     web:
       exposure:
-        include: health,info
+        include: health,info,prometheus
 logging:
   structured:
     format:
       console: ecs
+
+banking:
+  cors-origin: ${CORS_ORIGIN:http://localhost:5173}

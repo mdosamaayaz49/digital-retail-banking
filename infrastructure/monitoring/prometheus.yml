@@ -1,0 +1,7 @@
+global:
+  scrape_interval: 15s
+scrape_configs:
+  - job_name: banking-services
+    metrics_path: /actuator/prometheus
+    static_configs:
+      - targets: ['banking:8081','auth:8086','customer:8083','account:8084','statement:8085','notifications:8082']

@@ -45,6 +45,7 @@ import { AccountDetails, Accounts } from "./pages/Accounts";
 import Admin from "./pages/Admin";
 import { Beneficiaries } from "./pages/Beneficiaries";
 import { Dashboard } from "./pages/Dashboard";
+import { Payments } from "./pages/Payments";
 import { Help, Login, ProfilePage, Security } from "./pages/Settings";
 import { Statements } from "./pages/Statements";
 import { History, TransactionDetails } from "./pages/Transactions";
@@ -53,6 +54,7 @@ const nav = [
   { to: "/", name: "Overview", icon: LayoutDashboard },
   { to: "/accounts", name: "My accounts", icon: Wallet },
   { to: "/transfer", name: "Transfer money", icon: ArrowLeftRight },
+  { to: "/payments", name: "Payments & schedules", icon: ReceiptText },
   { to: "/beneficiaries", name: "Beneficiaries", icon: Users },
   { to: "/transactions", name: "Transactions", icon: ReceiptText },
   { to: "/statements", name: "Statements", icon: FileText },
@@ -63,6 +65,9 @@ export default function App() {
     [toast, setToast] = useState(""),
     [mobile, setMobile] = useState(false),
     [notifications, setNotifications] = useState(false);
+  const [authPending, setAuthPending] = useState(
+    sessionStorage.getItem("nusantara-login") === "1",
+  );
   const location = useLocation();
   const navigate = useNavigate();
   const query = useQueryClient();
@@ -77,7 +82,8 @@ export default function App() {
         setAuthError(
           "Identity service is unavailable. You can explore the read-only preview.",
         ),
-      );
+      )
+      .finally(() => setAuthPending(false));
     identity.onTokenExpired = () => {
       identity.updateToken(40).catch(() => {
         setLive(false);
@@ -265,34 +271,41 @@ export default function App() {
           </header>
           <main id="content" className="main-content">
             {authError && <div className="notice">{authError}</div>}
-            <Routes>
-              <Route path="/" element={<Dashboard />} />
-              <Route path="/accounts" element={<Accounts />} />
-              <Route path="/accounts/:id" element={<AccountDetails />} />
-              <Route path="/transfer" element={<Transfer />} />
-              <Route path="/beneficiaries" element={<Beneficiaries />} />
-              <Route path="/transactions" element={<History />} />
-              <Route
-                path="/transactions/:id"
-                element={<TransactionDetails />}
-              />
-              <Route path="/statements" element={<Statements />} />
-              <Route path="/profile" element={<ProfilePage />} />
-              <Route path="/security" element={<Security />} />
-              <Route path="/login" element={<Login />} />
-              <Route path="/register" element={<Login register />} />
-              <Route path="/admin/*" element={<Admin />} />
-              <Route path="/help" element={<Help />} />
-              <Route
-                path="*"
-                element={
-                  <>
-                    <h1>Page not found</h1>
-                    <Link to="/">Return to overview</Link>
-                  </>
-                }
-              />
-            </Routes>
+            {authPending ? (
+              <p className="loading" role="status">
+                Restoring secure session…
+              </p>
+            ) : (
+              <Routes>
+                <Route path="/" element={<Dashboard />} />
+                <Route path="/accounts" element={<Accounts />} />
+                <Route path="/accounts/:id" element={<AccountDetails />} />
+                <Route path="/transfer" element={<Transfer />} />
+                <Route path="/payments" element={<Payments />} />
+                <Route path="/beneficiaries" element={<Beneficiaries />} />
+                <Route path="/transactions" element={<History />} />
+                <Route
+                  path="/transactions/:id"
+                  element={<TransactionDetails />}
+                />
+                <Route path="/statements" element={<Statements />} />
+                <Route path="/profile" element={<ProfilePage />} />
+                <Route path="/security" element={<Security />} />
+                <Route path="/login" element={<Login />} />
+                <Route path="/register" element={<Login register />} />
+                <Route path="/admin/*" element={<Admin />} />
+                <Route path="/help" element={<Help />} />
+                <Route
+                  path="*"
+                  element={
+                    <>
+                      <h1>Page not found</h1>
+                      <Link to="/">Return to overview</Link>
+                    </>
+                  }
+                />
+              </Routes>
+            )}
           </main>
           <footer>
             <span>© 2026 Nusantara. A personal banking portfolio project.</span>

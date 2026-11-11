@@ -260,8 +260,9 @@ export function Transfer() {
           </div>
           <hr />
           <small>
-            All funds are fictional. DuitNow-style transfers and external
-            payment networks are planned simulations, not live integrations.
+            All funds are fictional. Try mock-network payments and future
+            transfers in Payments & schedules. No real financial networks are
+            connected.
           </small>
           {!live && (
             <button

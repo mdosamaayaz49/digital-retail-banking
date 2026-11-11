@@ -1,0 +1,54 @@
+server:
+  port: ${PORT:8084}
+  error:
+    include-message: never
+spring:
+  application:
+    name: account-service
+  datasource:
+    url: ${DATABASE_URL:jdbc:postgresql://localhost:5432/banking}
+    username: ${DATABASE_USER:banking}
+    password: ${DATABASE_PASSWORD}
+  flyway:
+    enabled: false
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: validate
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          issuer-uri: ${OIDC_ISSUER:http://localhost:8180/realms/nusantara}
+          jwk-set-uri: ${OIDC_JWKS:http://localhost:8180/realms/nusantara/protocol/openid-connect/certs}
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP:localhost:9092}
+    producer:
+      acks: all
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.apache.kafka.common.serialization.StringSerializer
+      properties:
+        enable.idempotence: true
+        delivery.timeout.ms: 10000
+        request.timeout.ms: 5000
+        max.block.ms: 5000
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus
+  endpoint:
+    health:
+      probes:
+        enabled: true
+springdoc:
+  swagger-ui:
+    path: /swagger-ui.html
+banking:
+  cors-origin: ${CORS_ORIGIN:http://localhost:5173}
+  outbox-enabled: ${OUTBOX_ENABLED:true}
+  orders-enabled: ${ORDERS_ENABLED:true}
+logging:
+  structured:
+    format:
+      console: ecs

@@ -1,0 +1,1 @@
+INSERT INTO mock_payment_aliases VALUES ('daniel@example.test','10000000-0000-0000-0000-000000000003','Daniel Tan','ACCEPT'),('reject@example.test','10000000-0000-0000-0000-000000000003','Network rejection demo','REJECT');

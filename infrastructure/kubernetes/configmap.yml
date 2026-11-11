@@ -11,3 +11,9 @@ data:
   KAFKA_BOOTSTRAP: kafka:9092
   REDIS_HOST: redis
   BANKING_URL: http://banking:8081
+
+  AUTH_URL: http://auth:8086
+  CUSTOMER_URL: http://customer:8083
+  ACCOUNT_URL: http://account:8084
+  STATEMENT_URL: http://statement:8085
+  NOTIFICATION_URL: http://notifications:8082

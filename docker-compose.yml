@@ -58,6 +58,12 @@ services:
       postgres:
         condition: service_healthy
     ports: ["127.0.0.1:8081:8081"]
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://localhost:8081/actuator/health/readiness || exit 1"]
+      interval: 5s
+      timeout: 3s
+      retries: 40
+      start_period: 30s
   gateway:
     build:
       context: ./backend
@@ -65,7 +71,12 @@ services:
     environment:
       BANKING_URL: http://banking:8081
       REDIS_HOST: redis
-    depends_on: [banking,redis]
+      AUTH_URL: http://auth:8086
+      CUSTOMER_URL: http://customer:8083
+      ACCOUNT_URL: http://account:8084
+      STATEMENT_URL: http://statement:8085
+      NOTIFICATION_URL: http://notifications:8082
+    depends_on: [banking,redis,auth,customer,account,statement]
     ports: ["127.0.0.1:8080:8080"]
   notifications:
     build:
@@ -75,8 +86,65 @@ services:
       DATABASE_URL: jdbc:postgresql://postgres:5432/banking
       DATABASE_PASSWORD: ${DATABASE_PASSWORD}
       KAFKA_BOOTSTRAP: kafka:29092
-    depends_on: [banking,kafka]
+      OIDC_JWKS: http://keycloak:8080/realms/nusantara/protocol/openid-connect/certs
+    depends_on:
+      banking:
+        condition: service_healthy
+      kafka:
+        condition: service_started
     restart: on-failure
+  auth:
+    build:
+      context: ./backend
+      dockerfile: auth-service/Dockerfile
+    environment:
+      DATABASE_URL: jdbc:postgresql://postgres:5432/banking
+      DATABASE_PASSWORD: ${DATABASE_PASSWORD}
+      OIDC_JWKS: http://keycloak:8080/realms/nusantara/protocol/openid-connect/certs
+      CORS_ORIGIN: http://localhost:5173
+    depends_on:
+      banking:
+        condition: service_healthy
+    ports: ["127.0.0.1:8086:8086"]
+  customer:
+    build:
+      context: ./backend
+      dockerfile: customer-service/Dockerfile
+    environment:
+      DATABASE_URL: jdbc:postgresql://postgres:5432/banking
+      DATABASE_PASSWORD: ${DATABASE_PASSWORD}
+      OIDC_JWKS: http://keycloak:8080/realms/nusantara/protocol/openid-connect/certs
+      CORS_ORIGIN: http://localhost:5173
+    depends_on:
+      banking:
+        condition: service_healthy
+    ports: ["127.0.0.1:8083:8083"]
+  account:
+    build:
+      context: ./backend
+      dockerfile: account-service/Dockerfile
+    environment:
+      DATABASE_URL: jdbc:postgresql://postgres:5432/banking
+      DATABASE_PASSWORD: ${DATABASE_PASSWORD}
+      OIDC_JWKS: http://keycloak:8080/realms/nusantara/protocol/openid-connect/certs
+      CORS_ORIGIN: http://localhost:5173
+    depends_on:
+      banking:
+        condition: service_healthy
+    ports: ["127.0.0.1:8084:8084"]
+  statement:
+    build:
+      context: ./backend
+      dockerfile: statement-service/Dockerfile
+    environment:
+      DATABASE_URL: jdbc:postgresql://postgres:5432/banking
+      DATABASE_PASSWORD: ${DATABASE_PASSWORD}
+      OIDC_JWKS: http://keycloak:8080/realms/nusantara/protocol/openid-connect/certs
+      CORS_ORIGIN: http://localhost:5173
+    depends_on:
+      banking:
+        condition: service_healthy
+    ports: ["127.0.0.1:8085:8085"]
   frontend:
     build: ./frontend
     ports: ["127.0.0.1:5173:8080"]

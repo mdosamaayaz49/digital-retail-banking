@@ -57,22 +57,16 @@ export function Dashboard() {
           }),
   });
   const total = accounts.reduce((sum, a) => sum + Number(a.balance), 0);
+  const analytics = useQuery({
+    queryKey: ["analytics", live],
+    queryFn: () =>
+      api<{ name: string; period: string; income: number; spending: number }[]>(
+        "/analytics?months=6",
+      ),
+    enabled: live,
+  });
   const chart = live
-    ? Array.from({ length: 6 }, (_, i) => ({
-        name: ["Jun", "Jul", "Aug", "Sep", "Oct", "Nov"][i],
-        income:
-          i === 5
-            ? history.data?.items
-                .filter((t) => t.amount > 0)
-                .reduce((sum, t) => sum + Number(t.amount), 0) || 0
-            : 0,
-        spending:
-          i === 5
-            ? history.data?.items
-                .filter((t) => t.amount < 0)
-                .reduce((sum, t) => sum - Number(t.amount), 0) || 0
-            : 0,
-      }))
+    ? analytics.data || []
     : [
         { name: "Jun", income: 4200, spending: 2600 },
         { name: "Jul", income: 5800, spending: 3400 },
@@ -81,6 +75,10 @@ export function Dashboard() {
         { name: "Oct", income: 6100, spending: 3200 },
         { name: "Nov", income: 8000, spending: 4600 },
       ];
+  const shown = period === "This month" ? chart.slice(-1) : chart;
+  const incomeTotal = shown.reduce((sum, p) => sum + Number(p.income), 0),
+    spendingTotal = shown.reduce((sum, p) => sum + Number(p.spending), 0);
+
   return (
     <>
       <Title
@@ -129,7 +127,8 @@ export function Dashboard() {
               <span className="balance-tick">
                 <Check size={12} />
               </span>
-              Across {accounts.length} accounts <span>·</span> Available to you
+              Across {accounts.filter((a) => a.status !== "CLOSED").length} open
+              accounts <span>·</span> Book balance
             </div>
             <div className="balance-card-bottom">
               <Link to="/transfer">
@@ -198,16 +197,19 @@ export function Dashboard() {
           </Link>
         </div>
         <div className="account-cards">
-          {accounts.map((account, i) => (
-            <AccountCard
-              key={account.id}
-              account={account}
-              index={i}
-              hide={!visible}
-            />
-          ))}
+          {accounts
+            .filter((a) => a.status !== "CLOSED")
+            .map((account, i) => (
+              <AccountCard
+                key={account.id}
+                account={account}
+                index={i}
+                hide={!visible}
+              />
+            ))}
         </div>
       </section>
+      <ErrorBox error={analytics.error} />
       <div className="analytics-grid">
         <section className="panel cashflow">
           <div className="panel-title">
@@ -236,35 +238,17 @@ export function Dashboard() {
               <span>
                 <i className="dot income" /> Money in
               </span>
-              <strong>
-                RM{" "}
-                {money(
-                  live
-                    ? chart[5].income
-                    : period === "This month"
-                      ? 8000
-                      : 35200,
-                )}
-              </strong>
+              <strong>RM {money(incomeTotal)}</strong>
             </div>
             <div>
               <span>
                 <i className="dot spending" /> Money out
               </span>
-              <strong>
-                RM{" "}
-                {money(
-                  live
-                    ? chart[5].spending
-                    : period === "This month"
-                      ? 4600
-                      : 19600,
-                )}
-              </strong>
+              <strong>RM {money(spendingTotal)}</strong>
             </div>
             <span className="chart-period">
               {live
-                ? "Latest 5 entries"
+                ? "MALAYSIAN CALENDAR MONTHS"
                 : period === "This month"
                   ? "NOV 2026 · ILLUSTRATIVE"
                   : "JUN–NOV 2026 · ILLUSTRATIVE"}

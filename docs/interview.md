@@ -12,15 +12,20 @@
 
 **3:30–4:15 · Events and statements.** Show reliable outbox, at-least-once Kafka delivery and event-ID deduplication; show a PDF derived from ledger history. Explain a compensation reversal rather than deletion.
 
-**4:15–5:00 · Delivery and limits.** Explain Docker, automated PostgreSQL/embedded Kafka tests and CI. Be explicit about planned service extraction, mock external payment networks, production infrastructure controls and unverified cluster rollout.
+**4:15–5:00 · Delivery and limits.** Explain Docker, automated PostgreSQL/embedded Kafka tests and CI. Show the seven executable services and explain their shared-database tradeoff, the fictional mock payment network, production infrastructure controls and any unverified cluster rollout.
 
 ## Services
 
-- Gateway: routes API requests, Redis peer-IP rate limit. JWT/ownership enforcement remains in the core.
-- Banking core / transfer-service: customer profiles, account read models, beneficiary management, transfer orchestration, SQL transaction, ledger, statements, audit and outbox.
-- Notification-service: Kafka listener, transactional persistence, deduplication; failure does not corrupt settlement.
-- Keycloak (auth boundary): OIDC registration, login, MFA enrollment, password/session management.
-- Planned customer/account/statement services: documented extraction boundaries, **not implemented stand-alone deployables**. Never present their directories as completed services.
+- Gateway: route ownership and Redis peer-IP limits; each downstream service independently validates JWTs.
+- Auth-service: provider discovery and validated identity metadata. Keycloak remains the credential/MFA/session authority.
+- Customer-service: profile provisioning and editing; no financial postings.
+- Account-service: owned views, zero-balance opening and empty-account closure; no independent debit/credit.
+- Transfer-service: one authoritative transaction for balances, ledger, holds/orders, compensation, audit and outbox; migrations and admin orchestration.
+- Statement-service: owned metadata and repeatable-read, ledger-derived PDFs.
+- Notification-service: actual Kafka listener, DB deduplication, bounded retry/quarantine and audited repair/replay.
+- Banking-kernel: shared contracts/security/business implementations, not a deployable server. Services import designated modules instead of exposing the entire kernel API.
+
+All processes have run independently; PostgreSQL is deliberately shared for this simulation. Do not describe this as seven isolated data stores or claim arbitrary microservice scaling of a single ledger lock boundary.
 
 ## Questions with answers
 
@@ -55,4 +60,10 @@
 - Designed a transactional outbox and Kafka notification consumer with at-least-once delivery and event-ID deduplication.
 - Added ledger-derived PDF statements, administrative KYC/account controls, Docker Compose and CI/deployment templates.
 
-Use only bullets whose verification matches docs/verification.md. Do not claim real bank integrations, regulated production operations, professional banking-domain employment, independent seven-service deployment or zero-loss guarantees.
+Use only bullets whose verification matches docs/verification.md. Do not claim real bank integrations, regulated production operations, professional banking-domain employment, database-per-service isolation, unverified production rollouts or zero-loss guarantees.
+
+**How do pending payments work?** Reserve available funds with a durable hold, then serialize cancellation and settlement. Cancellation releases; mock rejection releases without postings; accepted settlement releases the reservation and posts both entries atomically. A separate immutable network reference links the simulated provider decision to the ledger.
+
+**How do you recover a poison notification?** Exponential retries, durable quarantine before offset advancement, validated admin correction and a deterministic repair event ID. DB failure during quarantine does not lose the record; repeated repair cannot duplicate its notification.
+
+Additional honest résumé bullet: “Delivered seven executable Spring services with scheduled reservations, mock-network reconciliation, supported OIDC MFA and authenticated browser tests; documented a deliberate shared-PostgreSQL consistency boundary.”

@@ -14,3 +14,10 @@
 - **Testcontainers Docker API:** use a supported Docker client/API level; the managed Docker 29 engine may require `DOCKER_API_VERSION=1.44`. Test databases must be isolated. Only in constrained ephemeral environments use `TESTCONTAINERS_RYUK_DISABLED=true`, then remove your test containers explicitly.
 
 - **ClassNotFoundException after rebuilding a running JAR:** stop the Java process before replacing its executable archive, then start the newly packaged JAR. Boot loads nested classes lazily; overwriting the live artifact can invalidate archive offsets.
+
+- **JDBC-only service requires entityManagerFactory:** exclude both HibernateJpaAutoConfiguration and JpaRepositoriesAutoConfiguration. The completed customer/statement/notification service entry points do this; do not remove either exclusion.
+- **Native Kafka random port:** EmbeddedKafkaKraftBroker chooses an ephemeral port. Use .runtime/kafka.bootstrap via scripts/run-local.sh; setting kafkaPorts(9092) is not reliable in KRaft mode. Do not hardcode the broker's previous port.
+- **MFA test says invalid code after enrollment:** supported Keycloak TOTP policy may reject reuse in the same time window. The test waits for a new code before the second login, preserving the provider's replay protection.
+- **New identity cannot log in using short username:** the demo realm uses email-as-username for new registrations. Use the fictional email; legacy imported demo usernames remain available.
+- **Date filters omit the first Malaysian hours:** dates must be cast to timestamp before AT TIME ZONE. The completed queries and midnight boundary tests cover this conversion.
+- **STATEMENT_TOO_LARGE:** choose a narrower date range. PDF generation is bounded to 5,000 ledger entries and never silently truncates balances.

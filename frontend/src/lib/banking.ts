@@ -197,3 +197,6 @@ export const previewTransactions: Transaction[] = [
     currency: "MYR",
   },
 ];
+
+export const bankDate = (value: Date = new Date()) =>
+  value.toLocaleDateString("en-CA", { timeZone: "Asia/Kuala_Lumpur" });

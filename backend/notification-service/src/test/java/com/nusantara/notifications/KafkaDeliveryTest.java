@@ -18,7 +18,6 @@ import org.springframework.kafka.test.EmbeddedKafkaBroker;
 import org.springframework.kafka.test.context.EmbeddedKafka;
 import org.springframework.kafka.test.utils.KafkaTestUtils;
 import org.springframework.test.context.junit.jupiter.SpringJUnitConfig;
-import org.springframework.util.backoff.FixedBackOff;
 
 @SpringJUnitConfig(KafkaDeliveryTest.Config.class)
 @EmbeddedKafka(partitions = 1, topics = "banking.events", kraft = true)
@@ -27,6 +26,7 @@ class KafkaDeliveryTest {
   @Autowired JdbcTemplate db;
 
   @Configuration
+  @Import(KafkaConfig.class)
   @EnableKafka
   static class Config {
     @Bean
@@ -41,7 +41,7 @@ class KafkaDeliveryTest {
 
     @Bean
     ConcurrentKafkaListenerContainerFactory<String, String> kafkaListenerContainerFactory(
-        EmbeddedKafkaBroker broker) {
+        EmbeddedKafkaBroker broker, DefaultErrorHandler errors) {
       var f = new ConcurrentKafkaListenerContainerFactory<String, String>();
       var props = KafkaTestUtils.consumerProps("notifications-v1", "false", broker);
       props.put("auto.offset.reset", "earliest");
@@ -50,9 +50,14 @@ class KafkaDeliveryTest {
               props,
               new org.apache.kafka.common.serialization.StringDeserializer(),
               new org.apache.kafka.common.serialization.StringDeserializer()));
-      f.setCommonErrorHandler(new DefaultErrorHandler(new FixedBackOff(100, 10)));
+      f.setCommonErrorHandler(errors);
       return f;
     }
+  }
+
+  @org.junit.jupiter.api.BeforeEach
+  void resetDatabase() {
+    reset(db);
   }
 
   @Test
@@ -88,6 +93,25 @@ class KafkaDeliveryTest {
       assertEquals(3, attempts.get());
       verify(db, atLeast(3))
           .update(contains("on conflict(event_id) do nothing"), any(Object[].class));
+    } finally {
+      producer.destroy();
+      factory.destroy();
+    }
+  }
+
+  @Test
+  void malformedRecordIsDurablyQuarantined() throws Exception {
+    var props = KafkaTestUtils.producerProps(broker);
+    var factory =
+        new DefaultKafkaProducerFactory<String, String>(
+            props,
+            new org.apache.kafka.common.serialization.StringSerializer(),
+            new org.apache.kafka.common.serialization.StringSerializer());
+    var producer = new KafkaTemplate<>(factory);
+    try {
+      producer.send("banking.events", "poison", "not-json").get(10, TimeUnit.SECONDS);
+      verify(db, timeout(25000).atLeastOnce())
+          .update(contains("insert into notification_dead_letters"), any(Object[].class));
     } finally {
       producer.destroy();
       factory.destroy();

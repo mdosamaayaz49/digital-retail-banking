@@ -1,95 +1,116 @@
 # Nusantara · Digital Retail Banking
 
-A Java 21 and React portfolio simulation of Malaysian retail banking. Fictional identities, MYR funds, accounts and payment networks only. No affiliation with any bank, DuitNow, PayNet or Bank Negara Malaysia.
+A complete **portfolio banking simulation** built with Java 21, Spring Boot 3.5 and React/TypeScript. It demonstrates secure internet banking, atomic double-entry transfers, scheduled reservations, a fictional DuitNow-style network, PDF statements and reliable Kafka notifications.
 
-## Run locally
+**Fictional customers, accounts and MYR funds only. No real financial transactions or affiliation with a bank, DuitNow, PayNet or Bank Negara Malaysia.** This is personal project experience, not regulated banking-domain employment or a production banking system.
 
-Prerequisites: **JDK 21 (including javac)**, Maven 3.9+, Node 22.12+ or 24 LTS, Docker Engine and Docker Compose. Allow at least **10 GB free disk and 8 GB RAM**; rootless Docker with the vfs driver may require substantially more disk.
+## Start locally
+
+Prerequisites: Docker Engine + Compose. For development/testing: JDK 21 **including javac**, Maven 3.9+, Node 22.12+ or Node 24, curl and OpenSSL. Allow at least 10 GB free disk and 8 GB RAM. Docker's vfs driver can require substantially more disk.
+
+```sh
+sh scripts/init-env.sh
+docker compose up --build -d
+```
+
+Wait for the banking service to become healthy and Keycloak realm import to finish, then open **http://localhost:5173**. The initial dashboard is an explicitly labelled **read-only preview**. Choose **Sign in to banking** for real simulation database accounts.
+
+Fictional users `amira`, `daniel` and `reviewer` use the random `DEMO_PASSWORD` generated in your **local, ignored `.env`**. Read it locally; never commit it. `reviewer` has ADMIN/SUPPORT; Amira starts VERIFIED; Daniel starts with PENDING simulated KYC. Keycloak administration is http://localhost:8180 (`platform-admin`, separate generated `KEYCLOAK_ADMIN_PASSWORD`). Passwords, recovery, authenticator enrollment and sessions belong to Keycloak. Configure a mock SMTP server to demonstrate email recovery; never use real customer addresses.
+
+### Development without application containers
 
 ```sh
 sh scripts/init-env.sh
 docker compose up -d postgres redis kafka keycloak
-# Read the generated DEMO_PASSWORD from your local .env; never commit it.
-set -a
-. ./.env
-set +a
-mvn -f backend/pom.xml verify
-mvn -f backend/pom.xml package -DskipTests
-```
-
-In three terminals, after exporting `.env` in each:
-
-```sh
-java -jar backend/transfer-service/target/transfer-service-1.0.0-SNAPSHOT.jar
-java -jar backend/api-gateway/target/api-gateway-1.0.0-SNAPSHOT.jar
-java -jar backend/notification-service/target/notification-service-1.0.0-SNAPSHOT.jar
-```
-
-```sh
+sh scripts/run-local.sh
 cd frontend
 npm ci
 npm run dev
 ```
 
-Visit **http://localhost:5173**. The initial dashboard is explicitly a **read-only, illustrative preview**. Choose **Sign in to banking** to use database-backed accounts. Keycloak runs at http://localhost:8180. Users `amira`, `daniel` and `reviewer` share the locally generated `DEMO_PASSWORD`; these are fictional developer identities. Amira is verified; Daniel starts with pending simulated KYC; reviewer is ADMIN and SUPPORT. `platform-admin` is the identity-server administrator, with a separate generated password.
+The script builds all services, starts migration owner first, waits for readiness and records PIDs/logs in ignored `.runtime/`. Stop with `sh scripts/stop-local.sh` from the repository root. Do not rebuild executable JARs while they are running.
 
-Alternative, on a normal Docker host:
+If Kafka's container image exceeds a constrained environment's disk, use a **real embedded KRaft development broker**, not a mock: start only PostgreSQL/Redis/Keycloak with Compose, run `sh scripts/kafka-local.sh` in one terminal, then `sh scripts/run-local.sh` in another. The broker writes its random bootstrap address to `.runtime/kafka.bootstrap`; the startup script detects it. Do not run both broker options for the same demo. This helper requires Java/Maven test dependencies and is not packaged in production images.
 
-```sh
-sh scripts/init-env.sh
-docker compose up --build -d
-# When finished:
-docker compose down
-```
+## Implemented banking journeys
 
-Wait for Keycloak's realm endpoint and PostgreSQL health. Banking Flyway migrations must finish before starting the notification consumer; it restarts on startup failure. Container builds need outbound Maven/npm access. In managed proxies, see docs/troubleshooting.md for CA trust. The first Java startup applies schema and fictional funding migrations.
+- OIDC Authorization Code + S256 PKCE, short-lived JWTs, refresh-token rotation, logout, role checks, login lockout and supported Keycloak authenticator MFA. Tokens remain in browser memory.
+- Fictional profile registration/editing; admin KYC review; savings/current account opening at **zero balance**, ownership, filtering, available balance, status and zero-fund closure with retained history.
+- Beneficiary registration/removal; immediate own-account and cross-customer MYR transfers; scale, funds, active status, KYC, per-transfer and Malaysian daily-limit validation.
+- Customer-scoped idempotency, request fingerprint conflicts, deterministic row locking, atomic debit/credit, two balanced postings, audit and outbox in one SQL transaction.
+- Append-only financial/audit records; deferred database checks for transfer postings, cached balances and held funds; compensating reversals, never history deletion.
+- Scheduled transfers (up to 90 days), reserved funds, cancellation before settlement, concurrent settlement protection and failure notifications.
+- Fictional DuitNow-style alias routing: `daniel@example.test` accepts; `reject@example.test` rejects. Both resolve to Daniel's fictional account and require his registered beneficiary. Accepted payments use the real simulation ledger; rejected payments release reservations. Network messages and unique references reconcile to settled transfers.
+- Search/date/pagination, transaction details, ledger-derived monthly/custom-range PDF statements, and six-month live cashflow excluding own-account movements.
+- Kafka outbox publishing, retries, consumer deduplication, durable poison-message quarantine and audited admin repair/replay.
+- Separate admin UI for KYC, freeze/unfreeze, holds, transaction review/reversal, immutable audit, reconciliation, reports/CSV and notification recovery. SUPPORT has server-side read-only reconciliation access.
+- Structured logs, Actuator readiness/liveness and Prometheus metrics, optional Prometheus/Grafana configuration, CI, Dockerfiles, Kubernetes and OpenShift application manifests.
+
+All financial decisions execute on the server. Preview activity/charts are illustrative and intentionally distinct from the reconciled database seed.
+
+## Seven executable services
+
+| Service | Port | Responsibility |
+|---|---:|---|
+| api-gateway | 8080 | Routes, Redis token-bucket rate limiting |
+| transfer-service | 8081 | Ledger, transfers, holds/orders, mock network, admin, outbox, migrations |
+| notification-service | 8082 | Kafka consumption, idempotent notification storage, quarantine/recovery |
+| customer-service | 8083 | Fictional profile provisioning and editing |
+| account-service | 8084 | Owned account read models and zero-fund opening/closure |
+| statement-service | 8085 | Authorized ledger-derived PDF statements |
+| auth-service | 8086 | Public provider discovery and authenticated identity/session metadata |
+
+`backend/banking-kernel` is a regular shared domain/security/DTO library. Each service imports only its designated controllers. Keycloak is the identity provider, not an application password database. The simulation deliberately shares PostgreSQL: a single ledger owner preserves financial consistency; this is **not database-per-service isolation**. See [architecture](docs/architecture.md) for the tradeoff and safe scaling path.
 
 ## Repository
 
 ```text
-digital-retail-banking/
-├── frontend/                 React + TypeScript + Vite
-├── backend/
-│   ├── api-gateway/          Executable Spring Cloud Gateway, Redis rate limiting
-│   ├── auth-service/         Boundary notes; Keycloak supplies identity
-│   ├── customer-service/     Extraction boundary; implemented in banking core
-│   ├── account-service/      Extraction boundary; implemented in banking core
-│   ├── transfer-service/     Executable banking core and atomic ledger owner
-│   ├── statement-service/    Extraction boundary; implemented in banking core
-│   └── notification-service/ Executable Kafka consumer
-├── infrastructure/{docker,kubernetes,openshift}/
-├── docs/
-├── scripts/
-├── .github/workflows/
-└── docker-compose.yml
+frontend/                       React, TypeScript, Vite, Tailwind and Playwright
+backend/
+  banking-kernel/               Shared domain/security/contracts/business modules
+  api-gateway/ auth-service/ customer-service/ account-service/
+  transfer-service/ statement-service/ notification-service/
+infrastructure/
+  docker/ kubernetes/ openshift/ monitoring/
+docs/                           Architecture, API, security, tests and interview notes
+scripts/                        Environment, local lifecycle, broker and reconciliation
+.github/workflows/ci.yml         Java, frontend, security, containers and authenticated E2E
 ```
 
-## What this release implements
+## Verify
 
-- Keycloak Authorization Code + PKCE, JWT issuer/audience checks, CUSTOMER/ADMIN/SUPPORT realm roles; no application password storage.
-- Customer profile provisioning/editing, mock KYC review, account ownership, balance and status views, admin freeze/unfreeze.
-- Beneficiary registration/removal; internal own-account and cross-customer transfers.
-- `BigDecimal` + PostgreSQL `NUMERIC(19,2)`, customer serialization, ordered account locks, available-funds and transfer-limit checks.
-- Customer-scoped idempotency keys with payload fingerprint checks; two ledger postings, balance updates, audit and outbox in one transaction.
-- Append-only ledger and audit triggers, deferred database balance check, compensating reversal entries.
-- Searchable, date-filtered, paginated transaction history and details; ledger-derived PDF statements with ownership checks.
-- Transactional outbox publisher, Kafka notifications with event-ID deduplication and persistent retry.
-- Responsive customer and admin interfaces; explicit loading, error, empty, confirmation and success states.
+```sh
+mvn -B -f backend/pom.xml clean verify   # Docker needed for isolated PostgreSQL tests
+cd frontend
+npm ci
+npm test
+npm run build
+npx playwright install --with-deps chromium
+npm run test:e2e                       # Preview tests; authenticated tests require env below
+```
 
-## Honest scope
+For all browser journeys, start the complete stack and export `.env` before running Playwright:
 
-This is a **modular banking core with three executable services**, not seven independently deployed domain services. Accounts and ledger share a PostgreSQL transaction. Notification storage currently shares the database; the consumer has a distinct deployable process. Extraction notes describe the next architecture without presenting empty directories as completed microservices.
+```sh
+set -a
+. ./.env
+set +a
+cd frontend
+npm run test:e2e
+```
 
-Not yet implemented: DuitNow-style mock external routing/reconciliation, scheduled or cancellable pending transfers (internal settlement is immediate), account opening/closure UI, hold lifecycle, production AML engine, period-accurate live analytics (live overview shows only latest five entries), MFA enrollment automation, automated identity-session browser tests, database-per-service isolation, monitoring dashboards, production TLS/secret management or a fully exercised Kubernetes rollout. Monthly statements work; the API also accepts arbitrary past ranges up to one year. MFA enrollment and credential recovery use Keycloak's account console; SMTP must be configured for email flows.
+MFA testing creates and deletes a synthetic identity using the local Keycloak administrator, enrolls an authenticator and verifies a subsequent OTP login. Never enable traces or token/credential logging for this suite. `PLAYWRIGHT_CHROMIUM_EXECUTABLE=/usr/bin/chromium` uses an existing browser instead of downloading one.
 
-A new self-registered identity can provision its profile but receives no accounts or funds automatically. Use seeded identities for the complete demo. Read-only preview charts/activity are illustrative and differ from the reconciled database seed. This project does not confer regulated banking experience or production readiness.
+See [verification evidence](docs/verification.md) for actual outcomes and execution limits, [testing/scenarios](docs/testing.md), [implementation checklist](docs/checklist.md), [security](docs/security.md), [API](docs/api.md), [deployment](docs/deployment.md), [troubleshooting](docs/troubleshooting.md), and [interview presentation/Q&A](docs/interview.md).
 
-## Verification and learning
+Swagger/OpenAPI is available on each domain service's loopback port at `/swagger-ui.html` and `/v3/api-docs`. Gateway publishes `/api/**` only. `/actuator/health/readiness`, `/actuator/health/liveness` and `/actuator/prometheus` remain internal/loopback endpoints.
 
-See [verification](docs/verification.md) for exact checks run and limits, [checklist](docs/checklist.md) for phase progress, [architecture](docs/architecture.md) for diagrams and consistency, [security](docs/security.md), [API](docs/api.md), [testing](docs/testing.md), [deployment](docs/deployment.md), and [interview notes](docs/interview.md).
+## Scope and deployment boundaries
 
-OpenAPI: http://localhost:8081/swagger-ui.html and http://localhost:8081/v3/api-docs. The gateway serves `/api/**` only. Health: ports 8080, 8081 and 8082 `/actuator/health`. Development ports bind to loopback. Production must expose only a TLS ingress, not PostgreSQL, Keycloak management or core ports.
+This implements the requested educational banking workflows, including simulated KYC/AML review flags, not a production AML/fraud engine, real network settlement, real identity verification or regulatory compliance. All mock-network recipients live in this simulation's ledger; there is no external bank integration. The admin UI highlights transfers above RM 5,000 for educational review.
 
-## Demo reset
+A newly registered identity can provision a fictional profile, receive admin KYC verification and open zero-balance accounts. It receives no automatic grant of money. Use the seeded users for funded scenarios. Statement periods are at most one year/5,000 entries per PDF; narrow the range for larger histories.
 
-`docker compose down` preserves PostgreSQL data. To intentionally delete all local simulation history, first stop the app, then run `docker compose down -v` and restart. Keycloak's development store is ephemeral; reimported demo subjects match the seed. Never use this setup for real data.
+Production TLS/secret provisioning, database privilege separation, durable identity/broker storage, HA/DR, load certification and a real cluster rollout require deployment infrastructure. Kubernetes/OpenShift schemas are validated, but schema validation is not an exercised cluster deployment. See deployment.md and verification.md; no unperformed checks are claimed.
+
+`docker compose down` preserves PostgreSQL. To intentionally delete **all local simulation history**, stop local services and run `docker compose down -v`, then restart. Keycloak's development store is ephemeral. Never use this setup for real customer data.

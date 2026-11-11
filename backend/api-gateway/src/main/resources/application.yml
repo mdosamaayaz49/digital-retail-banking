@@ -12,6 +12,56 @@ spring:
       server:
         webflux:
           routes:
+            - id: identity
+              uri: ${AUTH_URL:http://localhost:8086}
+              predicates:
+                - Path=/api/v1/auth/**
+              filters:
+                - name: RequestRateLimiter
+                  args:
+                    key-resolver: "#{@clientKey}"
+                    redis-rate-limiter.replenishRate: 20
+                    redis-rate-limiter.burstCapacity: 40
+            - id: customer
+              uri: ${CUSTOMER_URL:http://localhost:8083}
+              predicates:
+                - Path=/api/v1/customers/**
+              filters:
+                - name: RequestRateLimiter
+                  args:
+                    key-resolver: "#{@clientKey}"
+                    redis-rate-limiter.replenishRate: 20
+                    redis-rate-limiter.burstCapacity: 40
+            - id: account
+              uri: ${ACCOUNT_URL:http://localhost:8084}
+              predicates:
+                - Path=/api/v1/accounts/**
+              filters:
+                - name: RequestRateLimiter
+                  args:
+                    key-resolver: "#{@clientKey}"
+                    redis-rate-limiter.replenishRate: 20
+                    redis-rate-limiter.burstCapacity: 40
+            - id: statement
+              uri: ${STATEMENT_URL:http://localhost:8085}
+              predicates:
+                - Path=/api/v1/statements/**
+              filters:
+                - name: RequestRateLimiter
+                  args:
+                    key-resolver: "#{@clientKey}"
+                    redis-rate-limiter.replenishRate: 20
+                    redis-rate-limiter.burstCapacity: 40
+            - id: notifications
+              uri: ${NOTIFICATION_URL:http://localhost:8082}
+              predicates:
+                - Path=/api/v1/admin/notification-dead-letters/**
+              filters:
+                - name: RequestRateLimiter
+                  args:
+                    key-resolver: "#{@clientKey}"
+                    redis-rate-limiter.replenishRate: 20
+                    redis-rate-limiter.burstCapacity: 40
             - id: banking
               uri: ${BANKING_URL:http://localhost:8081}
               predicates:
@@ -22,6 +72,7 @@ spring:
                     key-resolver: "#{@clientKey}"
                     redis-rate-limiter.replenishRate: 20
                     redis-rate-limiter.burstCapacity: 40
+
 management:
   endpoint:
     health:
@@ -30,7 +81,7 @@ management:
   endpoints:
     web:
       exposure:
-        include: health,info
+        include: health,info,prometheus
 logging:
   structured:
     format:

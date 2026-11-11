@@ -1,57 +1,45 @@
-# Phased implementation checklist
+# Completed application checklist
 
-Checked items have source and relevant build/API/test evidence. UI source is compiled and component-tested; interactive browser verification remains open.
+## Phase 1 — working foundation
 
-## Phase 1 — foundation
+- [x] Java 21/Spring Boot, React/TypeScript/Vite, PostgreSQL/Flyway and reconciled synthetic seed.
+- [x] Keycloak OIDC/PKCE, JWT issuer/audience/expiry/subject checks, roles and logout.
+- [x] Supported authenticator enrollment and subsequent MFA login verified in a real browser.
+- [x] Secure-session restoration, profile provisioning and responsive account dashboard.
 
-- [x] Inspect empty workspace; initialize monorepo and dependency versions.
-- [x] Define architecture, ownership boundaries and extraction plan.
-- [x] Java 21 Spring Boot, React/TypeScript/Vite and PostgreSQL/Flyway.
-- [x] Keycloak OIDC + PKCE and JWT issuer/audience validation.
-- [x] Account dashboard and synthetic customer seed with reconciled opening equity.
-- [x] Run core and gateway; verify real Keycloak tokens and SQL-backed APIs.
-- [x] React build and component test.
-- [ ] Authenticated dashboard/browser/MFA walkthrough verification.
+## Phase 2 — banking workflows
 
-## Phase 2 — core banking
+- [x] Savings/current account opening, zero-fund closure, ownership, filtering and retained history.
+- [x] Beneficiaries, profile editing, simulated KYC, account freeze/unfreeze.
+- [x] BigDecimal/NUMERIC, per-transfer/daily limits, available funds and manual holds.
+- [x] Atomic debit/credit, two-entry ledger, customer/account locks, idempotency and compensation.
+- [x] Deferred ledger/balance/hold integrity guards and immutable financial/audit history.
+- [x] Scheduled reservations, cancellation, concurrent settlement and future-date protection.
+- [x] Mock DuitNow-style aliases, acceptance/rejection, references and reconciliation.
+- [x] Search/date/pagination/details, monthly/custom-range PDF and ledger-based cashflow.
 
-- [x] Owned accounts, filtering UI, transaction listings and details.
-- [x] Customer profile provisioning/editing; beneficiary management.
-- [x] Atomic own-account and cross-customer transfers.
-- [x] BigDecimal/NUMERIC, available funds, per-transfer and daily limits.
-- [x] Idempotency, concurrency locks, append-only double-entry ledger.
-- [x] Database balance/posting reconciliation guards and compensating reversals.
-- [x] Monthly PDF statements and arbitrary past date-range API.
-- [x] PostgreSQL integration tests for correctness, rollback, ownership and PDF access.
-- [ ] Account creation/closure workflow and account-hold lifecycle.
-- [ ] Custom date-range selection in the statement UI (API supports it).
-- [ ] Pending/cancellable/scheduled transfers.
-- [ ] Mock DuitNow-style external network, reconciliation and rejection lifecycle.
+## Phase 3 — architecture and operations
 
-## Phase 3 — architecture/security
+- [x] Seven executable service entry points and a regular shared banking-kernel library.
+- [x] Specific gateway routes, Redis peer-IP rate limit, independent JWT/object/role enforcement.
+- [x] Customer/account/statement routes excluded from the deployed ledger service.
+- [x] Outbox publisher, Kafka consumer, deduplication and failure notifications.
+- [x] Production retry policy, durable quarantine and audited idempotent repair/replay.
+- [x] Admin KYC/accounts/holds/transactions/audit/reconciliation/reports/CSV/recovery UI.
+- [x] Keycloak authentication audit, optional MFA and brute-force policy configuration.
+- [x] Structured logs, readiness/liveness, Prometheus metrics and monitoring configuration.
 
-- [x] Executable gateway with Redis rate limiting.
-- [x] Transactional outbox and broker-acknowledged publisher with retained retries.
-- [x] Independent Kafka consumer, PostgreSQL event-ID deduplication.
-- [x] Embedded Kafka test for actual broker delivery and transient consumer retry.
-- [x] Admin dashboard, KYC review, account freeze/unfreeze, reversal and audit APIs/UI.
-- [x] Server-side object and role permissions; consistent business errors; security design.
-- [x] Keycloak development lockout, optional MFA enrollment and event-retention configuration.
-- [ ] Full live-stack Kafka outage/restart and crash-window fault injection.
-- [ ] Failed-transfer asynchronous notification workflow, poison-event operations and metrics.
-- [ ] Independent customer/account/statement services with isolated stores.
-- [ ] Production BFF evaluation, privilege separation, identity hardening and monitoring.
+## Phase 4 — verification and delivery
 
-## Phase 4 — delivery
+- [x] Clean Java reactor builds and database/broker/boundary tests.
+- [x] React test, TypeScript/Vite build and npm audit.
+- [x] Six real-browser Playwright journeys, including MFA, PDF, reversal and mobile layout.
+- [x] All seven processes started with real PostgreSQL/Redis/Keycloak/Kafka supporting services.
+- [x] Live OIDC/API and outbox → Kafka → notification → quarantine/repair verification.
+- [x] Dockerfiles/Compose, local lifecycle/broker scripts, CI and authenticated E2E job.
+- [x] Kubernetes and OpenShift schemas validated.
+- [x] Architecture/ER/lifecycle diagrams, API/security/testing/deployment/troubleshooting and interview notes.
 
-- [x] All three Maven modules package; 31 Java tests pass.
-- [x] React test/build and npm dependency audit pass.
-- [x] Dockerfiles, Compose configuration and successful infrastructure startup (Kafka removed locally after disk exhaustion).
-- [x] CI workflows, Kubernetes and OpenShift application templates.
-- [x] Architecture/ER/lifecycle diagrams, API/security/testing/deployment/troubleshooting documents.
-- [x] Demo scenarios, five-minute presentation, interview Q&A and honest résumé notes.
-- [ ] Browser Playwright execution and authenticated E2E automation.
-- [ ] End-to-end Docker image build verification in a sufficiently large environment.
-- [ ] Actual GitHub Actions run, Trivy scan and Kubernetes/OpenShift rollout.
+## Deployment boundaries, not unfinished simulation workflows
 
-No seven-service completion, production-readiness or regulated banking experience is claimed. See verification.md for exact evidence and README.md for commands and limitations.
+The current service topology intentionally shares PostgreSQL. Database-per-service isolation, production TLS/secrets/privilege separation, HA/DR, certified KYC/AML/fraud controls and real payment-network connectivity are not claimed. No regulated banking experience is implied. Actual container image/remote CI/cluster execution status is recorded separately in verification.md; schema validation does not prove a cluster rollout.
