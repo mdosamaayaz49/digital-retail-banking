@@ -1,0 +1,13 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: banking-config
+data:
+  DATABASE_URL: jdbc:postgresql://postgresql:5432/banking
+  DATABASE_USER: banking
+  OIDC_ISSUER: https://identity.example.invalid/realms/nusantara
+  OIDC_JWKS: https://identity.example.invalid/realms/nusantara/protocol/openid-connect/certs
+  CORS_ORIGIN: https://banking.example.invalid
+  KAFKA_BOOTSTRAP: kafka:9092
+  REDIS_HOST: redis
+  BANKING_URL: http://banking:8081

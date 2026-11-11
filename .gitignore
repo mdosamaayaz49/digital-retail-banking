@@ -1,0 +1,10 @@
+**/target/
+**/node_modules/
+**/dist/
+.env
+*.log
+.playwright/
+test-results/
+!**/.env.example
+
+*.tsbuildinfo

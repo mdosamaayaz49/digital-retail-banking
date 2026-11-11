@@ -1,0 +1,124 @@
+{
+  "realm": "nusantara",
+  "enabled": true,
+  "registrationAllowed": true,
+  "registrationEmailAsUsername": true,
+  "resetPasswordAllowed": true,
+  "bruteForceProtected": true,
+  "failureFactor": 5,
+  "waitIncrementSeconds": 60,
+  "maxFailureWaitSeconds": 900,
+  "accessTokenLifespan": 300,
+  "ssoSessionIdleTimeout": 1800,
+  "revokeRefreshToken": true,
+  "refreshTokenMaxReuse": 0,
+  "roles": {
+    "realm": [
+      {
+        "name": "CUSTOMER"
+      },
+      {
+        "name": "ADMIN"
+      },
+      {
+        "name": "SUPPORT"
+      }
+    ]
+  },
+  "defaultRoles": [
+    "CUSTOMER"
+  ],
+  "clients": [
+    {
+      "clientId": "banking-web",
+      "publicClient": true,
+      "standardFlowEnabled": true,
+      "directAccessGrantsEnabled": false,
+      "redirectUris": [
+        "http://localhost:5173/*"
+      ],
+      "webOrigins": [
+        "http://localhost:5173"
+      ],
+      "attributes": {
+        "pkce.code.challenge.method": "S256"
+      },
+      "protocolMappers": [
+        {
+          "name": "banking-audience",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "config": {
+            "included.custom.audience": "banking-api",
+            "access.token.claim": "true"
+          }
+        }
+      ]
+    }
+  ],
+  "users": [
+    {
+      "id": "11111111-1111-1111-1111-111111111111",
+      "username": "amira",
+      "enabled": true,
+      "emailVerified": true,
+      "firstName": "Amira",
+      "lastName": "Rahman",
+      "email": "amira@example.test",
+      "realmRoles": [
+        "CUSTOMER"
+      ],
+      "credentials": [
+        {
+          "type": "password",
+          "value": "${DEMO_PASSWORD}",
+          "temporary": false
+        }
+      ]
+    },
+    {
+      "id": "22222222-2222-2222-2222-222222222222",
+      "username": "daniel",
+      "enabled": true,
+      "emailVerified": true,
+      "firstName": "Daniel",
+      "lastName": "Tan",
+      "email": "daniel@example.test",
+      "realmRoles": [
+        "CUSTOMER"
+      ],
+      "credentials": [
+        {
+          "type": "password",
+          "value": "${DEMO_PASSWORD}",
+          "temporary": false
+        }
+      ]
+    },
+    {
+      "id": "33333333-3333-3333-3333-333333333333",
+      "username": "reviewer",
+      "enabled": true,
+      "emailVerified": true,
+      "firstName": "Aisha",
+      "lastName": "Admin",
+      "email": "reviewer@example.test",
+      "realmRoles": [
+        "ADMIN",
+        "SUPPORT"
+      ],
+      "credentials": [
+        {
+          "type": "password",
+          "value": "${DEMO_PASSWORD}",
+          "temporary": false
+        }
+      ]
+    }
+  ],
+  "eventsEnabled": true,
+  "eventsExpiration": 86400,
+  "adminEventsEnabled": true,
+  "adminEventsDetailsEnabled": false,
+  "passwordPolicy": "length(12)"
+}
