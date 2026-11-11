@@ -115,6 +115,6 @@ Contacts are in customers rather than a redundant 1:1 table. Identity credential
 
 ## Versions
 
-Java 21 LTS; Spring Boot 3.5.16 and Spring Cloud 2025.0.3 selected from current published Maven metadata; Boot 4.x excluded to honor the requested 3.x stack. Boot BOM aligns Spring Security, Hibernate, Flyway, Kafka clients, JUnit and Testcontainers. Springdoc 2.8.17, PDFBox 3.0.6. Maven 3.9.11 and Node 24 used for verification.
+Java 21 LTS; Spring Boot 3.5.16 and Spring Cloud 2025.0.3 selected from current published Maven metadata; Boot 4.x excluded to honor the requested 3.x stack. Boot BOM aligns Spring Security, Hibernate, Flyway, Kafka clients, JUnit and Testcontainers. Springdoc 2.8.17, PDFBox 3.0.6. PostgreSQL JDBC is explicitly overridden to 42.7.12 to fix CVE-2026-54291 reported against the BOM-managed 42.7.11. Maven 3.9.11 and Node 24 used for verification.
 
 React 19, TypeScript 5, Vite 7, Tailwind 4, Router 7, Query 5, Hook Form 7, Zod 4, Recharts 3 and keycloak-js 26; lockfile records resolved versions. OTPAuth is a development-only library for the browser MFA test, not custom application cryptography. PostgreSQL 17, Redis 7.4, Kafka 3.9 and Keycloak 26 compose the local stack. Apply patch/image updates and review CI vulnerability findings continuously; these version pins are not a security certification.

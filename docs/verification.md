@@ -33,9 +33,11 @@
 
 ## Remote CI and deployment status
 
-The initial foundation commit's remote CI exposed an ambiguous mobile-test selector and a nonexistent Trivy action tag. Both are corrected: navigation is scoped explicitly and the action uses the verified published v0.36.0 release. The release push starts Java/frontend/security, service/frontend image-build jobs and a dedicated authenticated browser/MFA job. Remote outcomes are recorded when available; local success is not a substitute for a successful GitHub run.
+The initial foundation commit's remote CI exposed an ambiguous mobile-test selector and a nonexistent Trivy action tag. Both are corrected: navigation is scoped explicitly and the action uses the verified published v0.36.0 release.
 
-The standard full Docker image build/Compose topology was not executed inside this small rootless-vfs filesystem. Services were built with Maven and run directly with real backing services instead. Docker image builds are delegated to the configured GitHub runner. Optional Prometheus/Grafana containers were not launched locally; their configuration and metrics endpoints were validated.
+The first full-topology run [42973100581](https://github.com/mdosamaayaz49/digital-retail-banking/actions/runs/42973100581) passed backend/frontend checks, the authenticated browser/MFA job, **all seven Java image builds and the frontend image build** on fresh GitHub runners. Its security gate correctly rejected BOM-managed PostgreSQL JDBC 42.7.11 for CVE-2026-54291. The driver is explicitly upgraded to 42.7.12, with all 66 Java regression tests passing again; the security gate remains enabled. Consult the repository's latest Actions run for the patched release outcome.
+
+The eight images were built on GitHub, not in the small local rootless-vfs filesystem. Local integration ran the seven Java processes with real supporting services, while the fresh-runner browser job used the standard Docker PostgreSQL/Redis/Kafka/Keycloak dependencies. No full application-container Compose smoke test was performed. Optional Prometheus/Grafana containers were not launched locally; their manifests, provisioned dashboard, image tags and service metrics endpoints were validated.
 
 No Kubernetes/OpenShift cluster rollout, HA/DR exercise, load certification, real network integration, production identity/secret provisioning or regulatory certification was performed. Shared PostgreSQL is a deliberate simulation architecture; no database-per-service isolation is claimed.
 

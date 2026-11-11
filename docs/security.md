@@ -41,3 +41,5 @@ Public typed response DTOs omit request fingerprints and expected mock-network o
 The notification recovery API requires ADMIN. Validated corrected payloads, deterministic repair IDs and retained original/repaired records make repeated repair safe. If quarantine storage is unavailable, Kafka offsets are not advanced. Metrics expose aggregate counts on internal service ports only; gateway does not publish actuator routes.
 
 The browser MFA test creates a synthetic user, enrolls a supported provider authenticator and waits for a new TOTP window before logging in again. OTPAuth generates test codes from a provider-generated secret held only in test memory. No custom login/OTP API, persisted tokens or custom cryptography is implemented.
+
+The PostgreSQL JDBC driver is explicitly pinned to 42.7.12 rather than the Boot BOM's 42.7.11 after CI identified CVE-2026-54291. The security gate remains enabled; fixes are verified by the PostgreSQL integration suite and rescanning.
