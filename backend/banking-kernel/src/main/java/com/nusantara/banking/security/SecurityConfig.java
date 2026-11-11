@@ -81,16 +81,22 @@ public class SecurityConfig {
     var decoder = NimbusJwtDecoder.withJwkSetUri(jwks).build();
     decoder.setJwtValidator(
         new DelegatingOAuth2TokenValidator<>(
-            JwtValidators.createDefaultWithIssuer(issuer),
-            jwt ->
-                jwt.getAudience().contains("banking-api")
-                        && jwt.getExpiresAt() != null
-                        && jwt.getSubject() != null
-                        && !jwt.getSubject().isBlank()
-                    ? OAuth2TokenValidatorResult.success()
-                    : OAuth2TokenValidatorResult.failure(
-                        new OAuth2Error("invalid_token", "Invalid audience", null))));
+            JwtValidators.createDefaultWithIssuer(issuer), SecurityConfig::requiredClaims));
     return decoder;
+  }
+
+  static OAuth2TokenValidatorResult requiredClaims(Jwt jwt) {
+    boolean valid =
+        jwt.getAudience() != null
+            && jwt.getAudience().contains("banking-api")
+            && jwt.getExpiresAt() != null
+            && jwt.getSubject() != null
+            && !jwt.getSubject().isBlank();
+    return valid
+        ? OAuth2TokenValidatorResult.success()
+        : OAuth2TokenValidatorResult.failure(
+            new OAuth2Error(
+                "invalid_token", "Required banking token claims are missing or invalid", null));
   }
 
   @Bean
